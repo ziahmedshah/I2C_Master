@@ -1,0 +1,91 @@
+module master(clk, rst, data_write, data_read, sda, scl , wen, ren);
+input wire clk;
+input wire rst;
+input wire wen; //write enable
+input wire ren; //read enable
+input wire [7:0] data_write;
+
+output reg [7:0] data_read;
+output reg sda;
+output reg scl;
+
+parameter idle=0, start=1, addr=2, rw=4, ack=5, read_data=6, write_data=7, ack2=8, stop=9;
+reg [3:0] state;
+reg [6:0] adr;
+reg [7:0] count;
+
+always @(posedge clk or posedge rst) begin
+if (rst == 1) begin
+state <= idle;
+sda <= 1;
+scl <= 1;
+end
+else begin
+case (state)
+idle: begin
+sda <= 1;
+scl <= 1;
+//if (posedge scl) begin
+state <= start;
+//end
+end
+start: begin
+sda <= 0;
+state <= addr;
+count <= 7;
+end
+
+addr: begin
+sda <= adr[count];
+if (count == 0)
+state <= rw;
+else
+count <= count - 1;
+end
+
+rw: begin
+sda <= 1; //read
+state <= read_data;
+end
+
+read_data: begin
+if (ren == 1) begin
+state <= ack;
+count <= 7;
+end
+else
+state <= stop;
+end
+
+write_data: begin
+if (wen == 1) begin
+state <= ack;
+count <= 7;
+end
+else
+state <= stop;
+end
+ack: begin
+sda <= 1;
+state <= read_data; // Assuming data_rd is the state name for reading data
+end
+read_data: begin
+sda <= data_read[count];
+if (count == 0)
+state <= ack2;
+else
+count <= count - 1;
+end
+ack2: begin
+sda <= 1;
+state <= stop;
+end
+stop: begin
+sda <= 1;
+scl <= 1;
+state <= idle;
+end
+endcase  
+end
+end
+endmodule
