@@ -1,0 +1,66 @@
+/**
+Testing I2C Slave for reading/writing
+8 bits of data only
+*/
+
+`timescale 1ns / 1ps
+
+module tb_i2c();
+reg clk;
+reg rst;
+/// master io
+reg sda_m;   //master ip
+reg scl_m;  // master ip
+wire ack_m;
+wire flag_m; // data ready flag by master
+wire [7:0] data_rcvd_m;   //data rcvd by master
+
+//slave io	
+reg sda_s;   // slave ip
+reg scl_s;  // slave ip
+wire ack_s;
+wire flag_s; // data ready flag by slave
+wire [7:0] data_rcvd_s;   //data rcvd by slave
+
+
+//call slave
+I2C_Slave uutslave( .clk(), .rst(), .i2c_sda(), 
+.i2c_scl(), .i2c_ack() ,.i2c_data_ready(), .received_data());
+//call master
+master uttmaster(.clk(), .rst(), .data_write(), .data_read(),
+.sda(), .scl() , .wen, ren());
+
+
+ // Clock generation
+  always begin
+    #5 clk = ~clk;
+  end
+
+  // Initial stimulus
+  initial begin
+    clk = 0;
+    rst = 1;
+ sda_m = 1;
+    scl_m = 1;
+    sda_s = 1;
+    scl_s = 1;
+ 
+#10 rst = 0;  // rst pulled
+
+// I2C transaction
+    #20 sda_m = 0; // Start condition
+    #30 scl_m = 0;
+    #40 sda_s = 0; // Detect start condition by slave
+    #50 scl_s= 0;
+
+
+
+//DATA TRANSACTION
+
+
+    // End simulatio
+    #1000 $finish;
+  end
+
+endmodule
+
