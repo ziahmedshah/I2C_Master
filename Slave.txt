@@ -1,14 +1,14 @@
 module Slave(
-  input wire clk,
-  input wire rst,
-  input wire sda,
-  input wire scl,
-  output reg ack,
-  output reg data_ready, 
-  output reg [7:0] received_data
+input wire clk,
+input wire rst,
+input wire sda,
+input wire scl,
+output reg ack,
+output reg data_ready, 
+output reg [7:0] received_data
 );
 
-  // Define I2C states as parameters
+// Define I2C states as parameters
   parameter IDLE = 3'b000;
   parameter ADDRESS = 3'b001;
   parameter DATA = 3'b010;
@@ -18,50 +18,63 @@ module Slave(
   reg [6:0] slave_address; // ask
   reg [7:0] data_register;
   reg [2:0] state;
+reg [7:0] dataCounter;
+reg [6:0] addressCounter;
 
-  always @(posedge clk or posedge rst) begin
-    if (rst) begin
-      slave_address <= 0;
-      data_register <= 0;
-      state <= IDLE;
-    end else begin
-      case(state)
-        IDLE:
-          if (sda == 0 && scl == 1) begin  
-            state <= ADDRESS;
-          end
+always @(posedge clk or posedge rst) begin
+if (rst) begin
+slave_address <= 0;
+data_register <= 0;
+dataCounter<=0;
+addressCounter <=0;
 
-        ADDRESS:
-          if (scl == 1) begin
-            slave_address <= {slave_address[6:0], sda};
-            state <= DATA;
-          end
+state <= IDLE;
+end else begin
+case(state)
+IDLE:
+if (sda == 0 && scl == 1) begin  
+state <= ADDRESS;
+addressCounter <=7;
+end
 
-        DATA:
-          if (scl == 1) begin
-            data_register <= {data_register[7:0], sda};
-            state <= ACK;
-          end
+ADDRESS:
+if (scl == 1) begin
+slave_address <= {slave_address[6:0], sda};
+if (addressCounter ==0)
+state <= DATA;
+else
+addressCounter <= addressCounter -1;
+end
 
-        ACK:
-          if (scl == 0) begin
-            // Process received data or take necessary action
-            state <= STOP;
-          end
+DATA:
+if (scl == 1) begin
+data_register <= {data_register[7:0], sda};
+if (dataCounter==0)
+state <= ACK;
+else
+dataCounter <= dataCounter -1;
+end
 
-        STOP:
-          if (sda == 1 && scl == 1) begin
-            // End of transaction
-            state <= IDLE;
-            received_data <= data_register;
-          end
-      endcase
-    end
-  end
+ACK:
+if (scl == 0) begin
+// Process received data or take necessary action
+state <= STOP;
+end
+
+STOP:
+if (sda == 1 && scl == 1) begin
+// End of transaction
+state <= IDLE;
+received_data <= data_register;
+end
+endcase
+end
+end
 
 // Acknowledge logic
-  always @(state) begin
-  ack = (state == ACK);
-  data_ready = (state == STOP);
+always @(state) begin
+ack = (state == ACK);
+data_ready = (state == STOP);
 end
 endmodule
+
