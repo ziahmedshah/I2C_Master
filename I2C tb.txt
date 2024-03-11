@@ -9,26 +9,34 @@ module tb_i2c();
 reg clk;
 reg rst;
 /// master io
-reg sda_m;   //master ip
-reg scl_m;  // master ip
+reg sda_m ;   //master ip
+reg scl_m ;  // master ip
+reg wen;
+reg ren;
+reg [6:0] adr_m;
 wire ack_m;
-wire flag_m; // data ready flag by master
-wire [7:0] data_rcvd_m;   //data rcvd by master
+//wire flag_m ; // data ready flag by master
+wire [7:0] data_rcvd_m ;   //data rcvd by master
+
+
 
 //slave io	
-reg sda_s;   // slave ip
-reg scl_s;  // slave ip
-wire ack_s;
-wire flag_s; // data ready flag by slave
-wire [7:0] data_rcvd_s;   //data rcvd by slave
-
+reg sda_s ;   // slave ip
+reg scl_s ;  // slave ip
+wire ack_s ;
+wire flag_s ; // data ready flag by slave
+wire [7:0] data_rcvd_s ;   //data rcvd by slave
+wire [6:0] adr_s;
 
 //call slave
-I2C_Slave uutslave( .clk(), .rst(), .i2c_sda(), 
-.i2c_scl(), .i2c_ack() ,.i2c_data_ready(), .received_data());
+I2C_Slave uutslave( .clk(clk), .rst(rst), .i2c_sda(sda_s), 
+.i2c_scl(scl_s), .i2c_ack(ack_s) ,.i2c_data_ready(flag_s ), 
+.received_data(data_rcvd_s ), .slave_address(adr_s));
+
 //call master
-master uttmaster(.clk(), .rst(), .data_write(), .data_read(),
-.sda(), .scl() , .wen, ren());
+master uttmaster(.clk(clk), .rst(rst), .data_write(data_rcvd_m ), 
+.data_read(data_rcvd_m ), .ackk(ack_m),
+.sda(sda_m), .scl(scl_m) , .wen(wen), ren(ren), .adr(adr_m));
 
 
  // Clock generation
@@ -53,10 +61,21 @@ master uttmaster(.clk(), .rst(), .data_write(), .data_read(),
     #40 sda_s = 0; // Detect start condition by slave
     #50 scl_s= 0;
 
+//DATA TRANSACTION 
+//master sends addr bits with wr bit(sda 0 or 1) and generate an ack
+//addr 0101011
+ 
+initial begin
+adr_m <= 7'b0101011;
+adr_s = adr_m;
+if (adr_s == adr_m)
+ack_s=1;    /// working ongoing
+end
+slave rcv that address  and generate an ack signal 
+master then sends data to slave with ack bit and stops
+slave rcv thah data and generate an ack bit and stops
 
-
-//DATA TRANSACTION
-
+data 11110001
 
     // End simulatio
     #1000 $finish;
