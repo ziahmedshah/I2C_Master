@@ -1,105 +1,167 @@
-//a module that writes data into slave.
-module master(clk, rst, address, data_write, data_read, sda, scl , wen, ren);
-    input wire clk, rst;
-    input wire wen; // Write enable
-    input wire ren; // Read enable
-    input wire [7:0] data_write;
-    output reg [7:0] data_read;
-    output reg sda;
-    output reg scl;
-    input wire [6:0] address;
+`timescale 1ns / 1ps
 
-    parameter IDLE=0, START=1, ADDR=2, RW=3, ACK_ADDR=4, //READ_DATA=5, 
-    DATA=5, ACK_DATA=6, STOP=7;
+module i2c_master(clk, rst, sda, scl, rw, slave_address_ack, data_ack_slave, data_ack_master, 
+address_slave, data_in, data_write, address_register);
 
-    reg [2:0] state;
-    reg [7:0] count;
-    reg [6:0] address_out;
-    //reg save_state;
-    
+input wire clk;
+input wire rst;
+inout wire sda;
+output reg scl;
 
-    always @(posedge clk or posedge rst)
-    begin
-	
-        if (rst) begin
-            sda <= 1'b1;
-            scl <= 1'b1;
-            state <= IDLE;
-        end
-        else begin
-            scl <= clk; // Synchronize scl with clk
-            case (state)
-                IDLE: begin
-                    sda <= 1'b1;
-                    state <= START;
-                end
-                START: begin
-                    sda <= 1'b0;
-                    count <= 7;
-                    state <= ADDR;
-                end
-                ADDR: begin
-		    
-                    address_out <= address[count];
-                    if (count == 0)
-                        state <= RW;
-                    else
-                        count <= count - 1; // Non-blocking assignment
-			sda<=count;
-                end
-                RW: begin 
-                    //count <= 7;
-                    /*if (ren) begin 
-                        sda <= 1; // Read
-                        state <= ACK_ADDR;
-                        save_state <= READ_DATA;
-                    end
-                    else*/ if (wen) begin 
-                        sda <= 0; // Write
-                        state <= ACK_ADDR;
-                        //save_state <= DATA;
-                    end
-                    else begin 
-                        state <= STOP; 
-                    end
-                end
-                ACK_ADDR: begin
-                    if (!sda) 
-                       state <= DATA;
-                   else
-                        state <= ACK_ADDR;
-                end
-                /*DATA: begin
-                    count<=7;
-                    data_read[count] <= sda;
-                    if (count == 0)
-                        state <= ACK_DATA;
-                    else begin 
-                        count <= count - 1; 
-                        state <= READ_DATA; 
-                    end
-                end*/
-                DATA: begin
-                    count<=7;
-                    sda <= data_write[count];
-                    if (count == 0)
-                        state <= ACK_DATA;
-                    else begin
-                        count <= count - 1; 
-                        state <= DATA; 
-                    end
-                end
-                ACK_DATA: begin
-                    sda <= 0; // Acknowledgement
-                    state <= STOP;
-                end
-                STOP: begin
-                    sda <= 1;
-                    scl <= 1;
-                    state <= IDLE;
-                end
-            endcase
-        end
+parameter idle=0, start=1, slave_address=2, ack_slave_address=3, slave_register_address=4, rw_state=5, 
+write_data=6, read_data=7, ack_data_rcvd_by_slave=8, ack_data_by_master=9, stop=10;
+
+input wire rw;               //sda=1 for write, sda=0 read
+input wire slave_address_ack; //ack slave_address
+input 	   data_ack_slave; //ack of data rcvd by slave
+input	   data_ack_master; //ack of data rcvd by master
+
+reg 	sda_temp;
+
+
+reg 	   [10:0] state, state_nxt;
+output reg [7:0] data_in; //data read
+input wire [7:0] data_write;
+input 	   [6:0] address_slave;
+input 	   [6:0] address_register;
+reg 	   [7:0] count;
+
+assign scl = clk;
+
+
+// Bidirectional SDA Line Handling
+//wire sda_line;
+//reg sda_drive; // Drive SDA when acting as a master transmitter
+//assign sda = sda_drive ? sda_line : 1'bz;
+//assign sda_line = sda;
+//--------------------
+assign sda = sda_temp;
+
+always@(posedge clk) begin
+	if (rst) 
+	state_nxt <=idle;
+	else	 
+	state <=state_nxt;
+	end
+
+always@(posedge clk, posedge rst) begin
+	if (rst) begin
+    sda_temp<=1;
+    state_nxt<=start; 
     end
-endmodule
 
+    else begin
+    case (state)
+//state 0
+//idle: begin
+//sda_temp<=1;
+//state_nxt<=start;
+//end
+
+//state 1
+    start: begin
+    sda_temp<=0;
+    state_nxt<= slave_address;
+    count<=6; 
+    end //end state1
+
+//state 2
+//slave address
+    slave_address: begin
+    sda_temp<=address_slave[count];
+    if (count==0) 
+    state_nxt<= ack_slave_address;
+    else begin 
+    count<= count-1;
+    state_nxt<= slave_address; 
+    end
+    end //end state2
+
+//state 3
+    ack_slave_address: begin
+    if (sda_temp <= slave_address_ack) 
+    begin
+    state_nxt    <= slave_register_address ; 
+    count<=6;
+    end
+    else begin
+    state_nxt<=start;
+    end   
+    end  //end state3
+
+//state 4
+    slave_register_address: begin
+    sda_temp<= address_register[count];
+    if (count==0) 
+    state_nxt<=rw_state;
+    else 
+    count <= count-1; 
+    end //end state4
+
+//state 5
+    rw_state: begin
+    sda_temp<=rw;
+    if (rw) begin 
+    state_nxt<=write_data; count<=7; 
+    end ///ask a question here sda_temp not working properly why? but rw working
+    else begin 
+    state_nxt <=read_data; count<=7; 
+    end
+    end //end state5
+
+//state 6
+//master writing data into the slave
+    write_data: begin
+    sda_temp <= data_write[count];
+    if (count==0) 
+    state_nxt<= ack_data_rcvd_by_slave ;
+    else begin 
+    count <= count-1; 
+    state_nxt<=write_data; 
+    end
+    end //end state6
+
+//state7
+    read_data: begin
+    data_in [count] <= sda_temp;
+    if (count==0) 
+    state_nxt<= ack_data_by_master ;
+    else begin 
+    count<= count-1; 
+    state_nxt <= read_data; 
+    end
+    end //end state7
+
+//state 8
+    ack_data_rcvd_by_slave: begin
+    if ( data_ack_slave ) 
+    begin 
+    sda_temp <=1; state_nxt<=stop; 
+    end
+    else begin 
+    sda_temp <=0; 
+    state_nxt <=idle; 
+    end 
+    end //end state8
+
+//state 9
+    ack_data_by_master : begin
+    if (data_ack_master) 
+    begin 
+    sda_temp<=1; state_nxt<=stop; 
+    end
+    else begin 
+    sda_temp<=0; 
+    state_nxt<=idle; 
+    end
+    end //end state9
+
+//state 10
+    stop: begin
+    sda_temp<=1;
+    state_nxt<=start;
+    end //end stop
+    endcase 
+    end  
+    end //end fsm
+    endmodule
